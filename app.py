@@ -1,46 +1,38 @@
 from flask import Flask, render_template, Response, request, jsonify
 import cv2
-import mediapipe as mp
+import numpy as np
 import face_auth
 
 app = Flask(__name__)
 
-# Global shared camera instance
+# Global shared camera
 camera = cv2.VideoCapture(0)
 
+
 def gen_frames():
-    mp_face_detection = mp.solutions.face_detection
-    frame_count = 0
+    while True:
+        success, frame = camera.read()
+        if not success:
+            camera.open(0)
+            continue
 
-    with mp_face_detection.FaceDetection(
-        model_selection=1, min_detection_confidence=0.6
-    ) as detector:
-        while True:
-            success, frame = camera.read()
-            if not success:
-                camera.open(0)
-                continue
+        # Draw face boxes using InsightFace analyzer
+        try:
+            rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            faces  = face_auth.analyzer.get(rgb)
+            for face in faces:
+                box = face.bbox.astype(int)
+                x1, y1, x2, y2 = box[0], box[1], box[2], box[3]
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 100), 2)
+                score = round(float(face.det_score) * 100, 1)
+                cv2.putText(frame, f"Face {score}%", (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 100), 2)
+        except Exception:
+            pass
 
-            if frame_count % 3 == 0:
-                rgb     = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = detector.process(rgb)
-
-                if results.detections:
-                    h, w = frame.shape[:2]
-                    for det in results.detections:
-                        box = det.location_data.relative_bounding_box
-                        x1  = max(0, int(box.xmin * w))
-                        y1  = max(0, int(box.ymin * h))
-                        x2  = min(w, int((box.xmin + box.width) * w))
-                        y2  = min(h, int((box.ymin + box.height) * h))
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 100), 2)
-                        cv2.putText(frame, "Face Detected", (x1, y1 - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 100), 2)
-
-            frame_count += 1
-            ret, buffer = cv2.imencode('.jpg', frame)
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        ret, buffer = cv2.imencode('.jpg', frame)
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
 
 
 @app.route('/')
