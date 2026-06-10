@@ -1,29 +1,140 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Face-Secure Transaction</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FaceAuth — Secure Payment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <h1>Secure Transaction Form</h1>
 
-  <div class="form-container">
-    <form method="POST" action="/verify">
-      <label>Account No:</label>
-      <input type="text" name="account" required><br><br>
+  <header class="top-bar">
+    <span class="logo">⬡ FaceAuth</span>
+    <span class="badge">Biometric Payment Terminal</span>
+  </header>
 
-      <label>Amount:</label>
-      <input type="number" name="amount" required><br><br>
+  <main class="shell">
 
-      <button type="submit">Proceed with Face Verification</button>
-    </form>
+    <section class="camera-panel">
+      <div class="feed-wrapper">
+        <img id="videoFeed" src="/video_feed" alt="Live camera feed" />
+        <div class="scan-line"></div>
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+      </div>
+      <p class="cam-label">LIVE FEED — HOG Face Detection Active</p>
+    </section>
 
-    <!-- 👇 Live camera feed placed right below button -->
-    <div class="camera-box">
-      <img id="live-camera" src="{{ url_for('video_feed') }}" alt="Camera Feed">
-    </div>
-  </div>
+    <section class="form-panel">
+      <h1 class="heading">Authorize Transaction</h1>
+      <p class="subhead">Face recognition required to approve payment</p>
+
+      <div class="field-group">
+        <label for="account">Account Number</label>
+        <input type="text" id="account" name="account"
+               placeholder="e.g. 4012 •••• •••• 9876" autocomplete="off"/>
+      </div>
+
+      <div class="field-group">
+        <label for="amount">Amount (₹)</label>
+        <input type="number" id="amount" name="amount"
+               placeholder="0.00" min="1"/>
+      </div>
+
+      <button id="verifyBtn" onclick="verify()">
+        <span id="btnText">Scan &amp; Verify</span>
+        <span id="btnSpinner" class="spinner hidden"></span>
+      </button>
+
+      <div id="resultCard" class="result-card hidden">
+        <div id="resultIcon" class="result-icon"></div>
+        <p id="resultStatus" class="result-status"></p>
+        <p id="resultDetail" class="result-detail"></p>
+        <div id="similarityBar" class="sim-bar-wrap hidden">
+          <span class="sim-label">Similarity</span>
+          <div class="sim-track">
+            <div id="simFill" class="sim-fill"></div>
+          </div>
+          <span id="simPct" class="sim-pct"></span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span>128-d face embeddings · dlib ResNet · CLAHE preprocessing</span>
+  </footer>
+
+  <script>
+    async function verify() {
+      const account = document.getElementById('account').value.trim();
+      const amount  = document.getElementById('amount').value.trim();
+
+      if (!account || !amount) {
+        showResult(false, 'Missing fields', 'Please fill in account and amount.', null);
+        return;
+      }
+
+      setLoading(true);
+      hideResult();
+
+      const formData = new FormData();
+      formData.append('account', account);
+      formData.append('amount',  amount);
+
+      try {
+        const res  = await fetch('/verify', { method: 'POST', body: formData });
+        const data = await res.json();
+        showResult(data.authorized, data.message, '', data.similarity ?? null);
+      } catch (err) {
+        showResult(false, '❌ Server error', err.message, null);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function setLoading(on) {
+      document.getElementById('verifyBtn').disabled = on;
+      document.getElementById('btnText').textContent = on ? 'Scanning…' : 'Scan & Verify';
+      document.getElementById('btnSpinner').classList.toggle('hidden', !on);
+    }
+
+    function hideResult() {
+      document.getElementById('resultCard').classList.add('hidden');
+    }
+
+    function showResult(authorized, message, detail, similarity) {
+      const card    = document.getElementById('resultCard');
+      const icon    = document.getElementById('resultIcon');
+      const status  = document.getElementById('resultStatus');
+      const det     = document.getElementById('resultDetail');
+      const simWrap = document.getElementById('similarityBar');
+      const simFill = document.getElementById('simFill');
+      const simPct  = document.getElementById('simPct');
+
+      card.classList.remove('hidden', 'authorized', 'blocked');
+      card.classList.add(authorized ? 'authorized' : 'blocked');
+
+      icon.textContent   = authorized ? '✓' : '✕';
+      status.textContent = message;
+      det.textContent    = detail;
+
+      if (similarity !== null) {
+        simWrap.classList.remove('hidden');
+        const pct = Math.min(100, Math.max(0, similarity));
+        simFill.style.width      = pct + '%';
+        simFill.style.background = pct >= 50 ? '#00e87a' : '#ff4444';
+        simPct.textContent       = pct + '%';
+      } else {
+        simWrap.classList.add('hidden');
+      }
+    }
+  </script>
 
 </body>
 </html>

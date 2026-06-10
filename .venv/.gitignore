@@ -1,8 +1,0 @@
-cat > .gitignore << 'EOF'
-.venv/
-venv/
-__pycache__/
-dataset/
-*.pyc
-pyvenv.cfg
-EOF
